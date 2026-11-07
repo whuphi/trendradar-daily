@@ -7,53 +7,28 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 1
-
-      - name: Check secrets present
-        env:
-          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
-          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+      - name: 1 direct with browser UA
         run: |
-          echo "feishu_len=${#FEISHU_WEBHOOK_URL}"
-          echo "feishu_prefix=$(echo \"$FEISHU_WEBHOOK_URL\" | cut -c1-8)"
-          echo "ai_len=${#AI_API_KEY}"
+          code=$(curl -s -m 20 -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36" -o /tmp/a.json -w "%{http_code}" "https://newsnow.busiyi.world/api/s?id=toutiao&latest")
+          echo "direct http=$code bytes=$(wc -c < /tmp/a.json)"
+          head -c 200 /tmp/a.json; echo
 
-      - name: Check newsnow api reachable
+      - name: 2 via allorigins proxy
         run: |
-          for id in toutiao baidu weibo zhihu douyin; do
-            code=$(curl -s -m 20 -o /tmp/out_$id.json -w "%{http_code}" "https://newsnow.busiyi.world/api/s?id=$id")
-            size=$(wc -c < /tmp/out_$id.json)
-            echo "$id http=$code bytes=$size"
+          enc=$(python3 -c "import urllib.parse;print(urllib.parse.quote('https://newsnow.busiyi.world/api/s?id=toutiao&latest', safe=''))")
+          code=$(curl -s -m 30 -o /tmp/b.json -w "%{http_code}" "https://api.allorigins.win/raw?url=$enc")
+          echo "allorigins http=$code bytes=$(wc -c < /tmp/b.json)"
+          head -c 200 /tmp/b.json; echo
+
+      - name: 3 via jina reader
+        run: |
+          code=$(curl -s -m 30 -o /tmp/c.txt -w "%{http_code}" "https://r.jina.ai/https://newsnow.busiyi.world/api/s?id=toutiao&latest")
+          echo "jina http=$code bytes=$(wc -c < /tmp/c.txt)"
+          head -c 200 /tmp/c.txt; echo
+
+      - name: 4 rss reachable
+        run: |
+          for u in "https://www.solidot.org/index.rss" "https://36kr.com/feed" "https://sspai.com/feed"; do
+            code=$(curl -s -m 20 -o /tmp/r.xml -w "%{http_code}" "$u")
+            echo "$u http=$code bytes=$(wc -c < /tmp/r.xml)"
           done
-          echo "--- sample ---"
-          head -c 300 /tmp/out_toutiao.json || true
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-
-      - name: Install dependencies
-        run: uv sync --frozen --no-dev
-
-      - name: Check config loads
-        env:
-          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
-          AI_API_KEY: ${{ secrets.AI_API_KEY }}
-        run: |
-          uv run python -c "
-          from trendradar.core.loader import load_config
-          cfg = load_config()
-          print('feishu_configured =', bool(cfg.get('FEISHU_WEBHOOK_URL')))
-          print('feishu_len =', len(cfg.get('FEISHU_WEBHOOK_URL') or ''))
-          print('platforms_enabled =', cfg.get('PLATFORM_ENABLED'))
-          print('rss_enabled =', cfg.get('RSS_ENABLED'))
-          print('notification_enabled =', cfg.get('NOTIFICATION_ENABLED'))
-          print('ai_analysis_enabled =', cfg.get('AI_ANALYSIS_ENABLED'))
-          "
