@@ -1,0 +1,19 @@
+# 本地密钥 —— 绝不上传
+secrets.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# 运行产物
+output/
+logs/
+index.html
+run_daily.py
+
+# IDE / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
