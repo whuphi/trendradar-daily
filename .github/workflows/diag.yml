@@ -1,0 +1,59 @@
+name: Diag
+on:
+  workflow_dispatch:
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Check secrets present
+        env:
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+        run: |
+          echo "feishu_len=${#FEISHU_WEBHOOK_URL}"
+          echo "feishu_prefix=$(echo \"$FEISHU_WEBHOOK_URL\" | cut -c1-8)"
+          echo "ai_len=${#AI_API_KEY}"
+
+      - name: Check newsnow api reachable
+        run: |
+          for id in toutiao baidu weibo zhihu douyin; do
+            code=$(curl -s -m 20 -o /tmp/out_$id.json -w "%{http_code}" "https://newsnow.busiyi.world/api/s?id=$id")
+            size=$(wc -c < /tmp/out_$id.json)
+            echo "$id http=$code bytes=$size"
+          done
+          echo "--- sample ---"
+          head -c 300 /tmp/out_toutiao.json || true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Install dependencies
+        run: uv sync --frozen --no-dev
+
+      - name: Check config loads
+        env:
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+        run: |
+          uv run python -c "
+          from trendradar.core.loader import load_config
+          cfg = load_config()
+          print('feishu_configured =', bool(cfg.get('FEISHU_WEBHOOK_URL')))
+          print('feishu_len =', len(cfg.get('FEISHU_WEBHOOK_URL') or ''))
+          print('platforms_enabled =', cfg.get('PLATFORM_ENABLED'))
+          print('rss_enabled =', cfg.get('RSS_ENABLED'))
+          print('notification_enabled =', cfg.get('NOTIFICATION_ENABLED'))
+          print('ai_analysis_enabled =', cfg.get('AI_ANALYSIS_ENABLED'))
+          "
